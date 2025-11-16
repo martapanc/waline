@@ -1,0 +1,9 @@
+{
+  "buildCommand": "cd packages/server && pnpm install",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/packages/server/api"
+    }
+  ]
+}
