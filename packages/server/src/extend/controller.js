@@ -3,7 +3,7 @@ const { PasswordHash } = require('phpass');
 
 const defaultLocales = require('../locales/index.js');
 
-const defaultLang = 'en-us';
+const defaultLang = 'it';
 
 module.exports = {
   success(...args) {

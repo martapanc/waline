@@ -249,75 +249,47 @@ module.exports = class extends think.Service {
     }).then((resp) => resp.json());
   }
 
-  async telegram(self, parent) {
+  async telegram(self) {
     const { TG_BOT_TOKEN, TG_CHAT_ID, SITE_NAME, SITE_URL } = process.env;
 
     if (!TG_BOT_TOKEN || !TG_CHAT_ID) {
       return false;
     }
 
-    let commentLink = '';
-    const href = self.comment.match(/<a href="(.*?)">(.*?)<\/a>/g);
-
-    if (href !== null) {
-      for (let i = 0; i < href.length; i++) {
-        href[i] =
-          '[Link: ' +
-          href[i].replace(/<a href="(.*?)">(.*?)<\/a>/g, '$2') +
-          '](' +
-          href[i].replace(/<a href="(.*?)">(.*?)<\/a>/g, '$1') +
-          ')  ';
-        commentLink = commentLink + href[i];
-      }
-    }
-    if (commentLink !== '') {
-      commentLink = `\n` + commentLink + `\n`;
-    }
+    // Decode HTML entities and strip HTML tags from comment
     const comment = self.comment
-      .replace(/<a href="(.*?)">(.*?)<\/a>/g, '[Link:$2]')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/<a href="(.*?)">(.*?)<\/a>/g, '$2 ($1)')
       .replace(/<[^>]+>/g, '');
 
     const contentTG =
       think.config('TGTemplate') ||
-      `💬 *[{{site.name}}]({{site.url}}) 有新评论啦*
+      `💬 Nuovo commento su <b>${SITE_NAME}</b>
 
-*{{self.nick}}* 回复说：
+<b>${self.nick}</b> ha scritto:
 
-\`\`\`
-{{self.comment-}}
-\`\`\`
-{{-self.commentLink}}
-*邮箱：*\`{{self.mail}}\`
-*审核：*{{self.status}} 
+${comment}
 
-仅供评论预览，点击[查看完整內容]({{site.postUrl}})`;
+Stato: ${self.status}
 
-    const data = {
-      self: {
-        ...self,
-        comment,
-        commentLink,
-      },
-      parent,
-      site: {
-        name: SITE_NAME,
-        url: SITE_URL,
-        postUrl: SITE_URL + self.url + '#' + self.objectId,
-      },
-    };
-
-    const form = new FormData();
-
-    form.append('text', this.ctx.locale(contentTG, data));
-    form.append('chat_id', TG_CHAT_ID);
-    form.append('parse_mode', 'MarkdownV2');
+${SITE_URL + self.url + '#' + self.objectId}`;
 
     const resp = await fetch(
       `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`,
       {
         method: 'POST',
-        header: form.getHeaders(),
-        body: form,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: TG_CHAT_ID,
+          text: contentTG,
+          parse_mode: 'HTML',
+        }),
       },
     ).then((resp) => resp.json());
 
@@ -379,8 +351,21 @@ module.exports = class extends think.Service {
       return false;
     }
 
+    // Decode HTML entities and strip HTML tags from comment
+    const comment = self.comment
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/<a href="(.*?)">(.*?)<\/a>/g, '$2 ($1)')
+      .replace(/<[^>]+>/g, '');
+
     const data = {
-      self,
+      self: {
+        ...self,
+        comment,
+      },
       parent,
       site: {
         name: SITE_NAME,
@@ -392,22 +377,22 @@ module.exports = class extends think.Service {
     title = this.ctx.locale(title, data);
     content = this.ctx.locale(
       think.config('DiscordTemplate') ||
-        `💬 {{site.name|safe}} 有新评论啦 
-    【评论者昵称】：{{self.nick}}
-    【评论者邮箱】：{{self.mail}} 
-    【内容】：{{self.comment}} 
-    【地址】：{{site.postUrl}}`,
+        `
+    【Nickname】{{self.nick}}
+    【Email】{{self.mail}}
+    【Url】{{site.postUrl}}
+    【Commento】{{self.comment}}`,
       data,
     );
 
-    const form = new FormData();
-
-    form.append('content', `${title}\n${content}`);
-
     return fetch(DISCORD_WEBHOOK, {
       method: 'POST',
-      header: form.getHeaders(),
-      body: form,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: `${title}\n${content}`,
+      }),
     }).then((resp) => resp.statusText);
     // Expected return value: No Content
     // Since Discord doesn't return any response body on success, we just return the status text.
